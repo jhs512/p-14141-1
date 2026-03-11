@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.`in`.shared
 import com.back.boundedContexts.member.app.MemberFacade
 import com.back.boundedContexts.member.app.shared.ActorFacade
 import com.back.boundedContexts.member.app.shared.AuthTokenService
+import com.back.boundedContexts.member.app.shared.OneTimeTokenService
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.app.AppFacade
@@ -26,6 +27,7 @@ class ApiV1AuthController(
     private val memberFacade: MemberFacade,
     private val actorFacade: ActorFacade,
     private val authTokenService: AuthTokenService,
+    private val oneTimeTokenService: OneTimeTokenService,
 ) {
     data class MemberLoginRequest(
         @field:NotBlank
@@ -77,6 +79,35 @@ class ApiV1AuthController(
         response.expireAuthCookie("accessToken")
 
         return RsData("200-1", "로그아웃 되었습니다.")
+    }
+
+    data class OneTimeTokenRequest(
+        @field:NotBlank
+        val allowedPathPrefix: String,
+    ) {
+        companion object {
+            private val ALLOWED_PATH_PREFIXES = setOf("/sse/", "/ws")
+        }
+
+        fun validate() {
+            if (allowedPathPrefix !in ALLOWED_PATH_PREFIXES) {
+                throw AppException("400-1", "허용되지 않은 경로입니다.")
+            }
+        }
+    }
+
+    data class OneTimeTokenResBody(
+        val oneTimeToken: String,
+    )
+
+    @PostMapping("/oneTimeToken")
+    fun oneTimeToken(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @RequestBody @Valid request: OneTimeTokenRequest,
+    ): RsData<OneTimeTokenResBody> {
+        request.validate()
+        val token = oneTimeTokenService.generate(securityUser.id, request.allowedPathPrefix)
+        return RsData("200-1", "일회용 토큰이 발급되었습니다.", OneTimeTokenResBody(token))
     }
 
     @GetMapping("/me")

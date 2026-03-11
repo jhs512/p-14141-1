@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.`in`.shared
 import com.back.IntegrationMockMvcTest
 import com.back.boundedContexts.member.app.MemberFacade
 import com.back.boundedContexts.member.app.shared.AuthTokenService
+import com.back.boundedContexts.member.app.shared.OneTimeTokenService
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
@@ -22,6 +23,9 @@ class ApiV1AuthControllerTest : IntegrationMockMvcTest() {
 
     @Autowired
     private lateinit var authTokenService: AuthTokenService
+
+    @Autowired
+    private lateinit var oneTimeTokenService: OneTimeTokenService
 
     @Nested
     inner class Login {
@@ -140,6 +144,69 @@ class ApiV1AuthControllerTest : IntegrationMockMvcTest() {
             assertThat(accessTokenCookie.maxAge).isEqualTo(0)
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
+        }
+    }
+
+    @Nested
+    inner class OneTimeToken {
+        @Test
+        fun `인증된 사용자가 일회용 토큰을 발급받을 수 있다`() {
+            val member = memberFacade.findByUsername("user1")!!
+
+            mvc.post("/member/api/v1/auth/oneTimeToken") {
+                cookie(Cookie("apiKey", member.apiKey))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"allowedPathPrefix": "/sse/"}"""
+            }.andExpect {
+                status { isOk() }
+                match(handler().handlerType(ApiV1AuthController::class.java))
+                match(handler().methodName("oneTimeToken"))
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.oneTimeToken") { exists() }
+            }
+        }
+
+        @Test
+        fun `인증되지 않은 사용자는 일회용 토큰을 발급받을 수 없다`() {
+            mvc.post("/member/api/v1/auth/oneTimeToken") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"allowedPathPrefix": "/sse/"}"""
+            }.andExpect {
+                status { isUnauthorized() }
+            }
+        }
+
+        @Test
+        fun `일반 API 경로에서는 일회용 토큰을 사용할 수 없다`() {
+            val member = memberFacade.findByUsername("user1")!!
+            val token = oneTimeTokenService.generate(member.id, "/member/api/v1/auth/")
+
+            mvc.get("/member/api/v1/auth/me?oneTimeToken=$token")
+                .andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-1") }
+                }
+        }
+
+        @Test
+        fun `일회용 토큰으로 허용되지 않은 경로 prefix에 접근할 수 없다`() {
+            val member = memberFacade.findByUsername("user1")!!
+            val token = oneTimeTokenService.generate(member.id, "/ws")
+
+            mvc.get("/sse/test?oneTimeToken=$token")
+                .andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-4") }
+                }
+        }
+
+        @Test
+        fun `유효하지 않은 일회용 토큰은 401을 반환한다`() {
+            mvc.get("/sse/test?oneTimeToken=invalid-token")
+                .andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-4") }
+                }
         }
     }
 

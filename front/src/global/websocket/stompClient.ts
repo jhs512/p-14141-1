@@ -1,9 +1,12 @@
+import { fetchOneTimeToken } from "@/global/auth/oneTimeToken";
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 let stompClient: Client | null = null;
+let cachedOneTimeToken: string | null = null;
+let authenticatedMode = false;
 
 // 연결 대기 중인 구독 요청들
 const pendingSubscriptions: Array<{
@@ -24,11 +27,24 @@ const reconnectListeners = new Set<() => void>();
 
 let subscriptionIdCounter = 0;
 
-export function getStompClient(): Client {
+export function getStompClient(options?: { authenticated?: boolean }): Client {
+  authenticatedMode = options?.authenticated ?? false;
   if (stompClient) return stompClient;
 
   stompClient = new Client({
-    webSocketFactory: () => new SockJS(`${NEXT_PUBLIC_API_BASE_URL}/ws`),
+    webSocketFactory: () => {
+      const base = `${NEXT_PUBLIC_API_BASE_URL}/ws`;
+      const url = cachedOneTimeToken
+        ? `${base}?oneTimeToken=${cachedOneTimeToken}`
+        : base;
+      cachedOneTimeToken = null;
+      return new SockJS(url);
+    },
+    beforeConnect: async () => {
+      cachedOneTimeToken = authenticatedMode
+        ? await fetchOneTimeToken("/ws")
+        : null;
+    },
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,
@@ -69,8 +85,9 @@ export interface ManagedSubscription {
 export function subscribe(
   destination: string,
   callback: (message: IMessage) => void,
+  options?: { authenticated?: boolean },
 ): Promise<ManagedSubscription> {
-  const client = getStompClient();
+  const client = getStompClient(options);
   const id = `managed-sub-${++subscriptionIdCounter}`;
 
   // 활성 구독 목록에 등록

@@ -1,5 +1,6 @@
 import { MutableRefObject, useEffect, useRef, useState } from "react";
 
+import { useAuthContext } from "@/global/auth/hooks/useAuth";
 import type { components } from "@/global/backend/apiV1/schema";
 import client from "@/global/backend/client";
 import {
@@ -77,6 +78,7 @@ function markPostAsViewed(postId: number): void {
 
 export default function usePostClient(initialPost: PostWithContentDto) {
   const [post, setPost] = useState<PostWithContentDto | null>(initialPost);
+  const { isLogin } = useAuthContext();
   const lastModifyDateAfterRef = useRef(initialPost.modifiedAt);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editorRef = useRef<any>(null);
@@ -180,15 +182,15 @@ export default function usePostClient(initialPost: PostWithContentDto) {
     const handleOnline = () => fetchLatest();
 
     // STOMP 구독
-    stompSubscribe(`/topic/posts/${initialPost.id}/modified`, onMessage).then(
-      (sub) => {
-        if (cancelled) {
-          sub.unsubscribe();
-        } else {
-          subscription = sub;
-        }
-      },
-    );
+    stompSubscribe(`/topic/posts/${initialPost.id}/modified`, onMessage, {
+      authenticated: isLogin,
+    }).then((sub) => {
+      if (cancelled) {
+        sub.unsubscribe();
+      } else {
+        subscription = sub;
+      }
+    });
 
     // WebSocket reconnect 시 놓친 변경사항 fetch
     const unsubscribeReconnect = onReconnect(fetchLatest);
@@ -203,7 +205,7 @@ export default function usePostClient(initialPost: PostWithContentDto) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
     };
-  }, [initialPost.id]);
+  }, [initialPost.id, isLogin]);
 
   const deletePost = (
     id: number,

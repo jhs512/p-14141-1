@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.app.shared.ActorFacade
+import com.back.boundedContexts.member.app.shared.OneTimeTokenService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
@@ -24,12 +25,13 @@ import tools.jackson.databind.ObjectMapper
 @Component
 class CustomAuthenticationFilter(
     private val actorFacade: ActorFacade,
+    private val oneTimeTokenService: OneTimeTokenService,
     private val objectMapper: ObjectMapper,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
     private val publicApiPaths = setOf(
-        "/member/api/v1/members/auth/login",
-        "/member/api/v1/members/auth/logout",
+        "/member/api/v1/auth/login",
+        "/member/api/v1/auth/logout",
         "/member/api/v1/members",
         "/member/api/v1/members/randomSecureTip",
     )
@@ -66,6 +68,19 @@ class CustomAuthenticationFilter(
     }
 
     private fun authenticateIfPossible(request: HttpServletRequest, response: HttpServletResponse) {
+        val oneTimeToken = request.getParameter("oneTimeToken")
+        if (!oneTimeToken.isNullOrBlank()) {
+            val uri = request.requestURI
+            if (!uri.startsWith("/sse/") && !uri.startsWith("/ws"))
+                throw AppException("400-1", "일회용 토큰은 해당 경로에서 사용할 수 없습니다.")
+            val memberId = oneTimeTokenService.validate(oneTimeToken, uri)
+                ?: throw AppException("401-4", "일회용 토큰이 유효하지 않습니다.")
+            val member = actorFacade.findById(memberId)
+                ?: throw AppException("401-4", "일회용 토큰이 유효하지 않습니다.")
+            authenticate(member)
+            return
+        }
+
         val (apiKey, accessToken) = extractTokens()
 
         if (apiKey.isBlank() && accessToken.isBlank()) return

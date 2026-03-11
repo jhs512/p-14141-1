@@ -18,33 +18,41 @@ export function useNewPostNotification(
   onNewPost?: (post: PostNotification) => void,
 ) {
   const [latestPost, setLatestPost] = useState<PostNotification | null>(null);
-  const { loginMember } = useAuthContext();
+  const { isLogin, isPending } = useAuthContext();
   const callbackRef = useRef(onNewPost);
-  const loginMemberRef = useRef(loginMember);
 
   useEffect(() => {
     callbackRef.current = onNewPost;
   }, [onNewPost]);
 
   useEffect(() => {
-    loginMemberRef.current = loginMember;
-  }, [loginMember]);
+    if (isPending) return;
 
-  useEffect(() => {
-    const subscription = subscribe("posts-new", (data) => {
-      const post: PostNotification = JSON.parse(data);
+    let cancelled = false;
+    let subscription: Awaited<ReturnType<typeof subscribe>> | null = null;
 
-      // 작성자 본인이면 무시
-      if (loginMemberRef.current?.id === post.authorId) return;
+    subscribe(
+      "posts-new",
+      (data) => {
+        const post: PostNotification = JSON.parse(data);
 
-      setLatestPost(post);
-      callbackRef.current?.(post);
+        setLatestPost(post);
+        callbackRef.current?.(post);
+      },
+      { authenticated: isLogin },
+    ).then((sub) => {
+      if (cancelled) {
+        sub.unsubscribe();
+      } else {
+        subscription = sub;
+      }
     });
 
     return () => {
-      subscription.unsubscribe();
+      cancelled = true;
+      subscription?.unsubscribe();
     };
-  }, []);
+  }, [isPending, isLogin]);
 
   return { latestPost };
 }

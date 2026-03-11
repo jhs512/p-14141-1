@@ -37,16 +37,14 @@ export default function useAuth() {
     setLoginMember(null as unknown as LoginMember);
   };
 
-  const logout = (onSuccess: () => void) => {
+  const logout = () => {
     client.DELETE("/member/api/v1/auth/logout", {}).then((res) => {
       if (res.error) {
         toast.error(res.error.msg);
         return;
       }
 
-      clearLoginMember();
-
-      onSuccess();
+      window.location.replace("/");
     });
   };
 

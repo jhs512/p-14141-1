@@ -51,6 +51,7 @@ class SecurityConfig(
             formLogin { disable() }
             logout { disable() }
             httpBasic { disable() }
+            cors { }
 
             sessionManagement {
                 sessionCreationPolicy = SessionCreationPolicy.STATELESS

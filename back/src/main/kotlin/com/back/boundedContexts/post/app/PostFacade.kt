@@ -27,6 +27,10 @@ class PostFacade(
     private val postStompService: PostStompService,
     private val postSseService: PostSseService,
 ) {
+    companion object {
+        private const val NEW_POST_ALERT_HIT_COUNT = 10
+    }
+
     @Transactional(readOnly = true)
     fun count(): Long = postRepository.count()
 
@@ -148,7 +152,10 @@ class PostFacade(
         val previousHitCount = post.hitCount
         post.incrementHitCount()
 
-        if (post.published && previousHitCount == 9 && post.hitCount == 10) {
+        if (post.published &&
+            previousHitCount < NEW_POST_ALERT_HIT_COUNT &&
+            post.hitCount >= NEW_POST_ALERT_HIT_COUNT
+        ) {
             postSseService.notifyNewPost(post)
         }
 

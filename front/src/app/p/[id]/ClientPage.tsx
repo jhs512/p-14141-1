@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import type { components } from "@/global/backend/apiV1/schema";
 
 import PostCommentWriteAndList from "./_components/PostCommentWriteAndList";
@@ -16,6 +18,17 @@ export default function ClientPage({
 }) {
   const postState = usePostClient(initialPost);
   const postCommentsState = usePostComments(initialPost.id);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+
+    const id = decodeURIComponent(hash.slice(1));
+    const timer = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-6">

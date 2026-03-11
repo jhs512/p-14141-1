@@ -25,7 +25,10 @@ export default function ClientPage({
 
     const id = decodeURIComponent(hash.slice(1));
     const timer = setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      const el =
+        document.getElementById(id) ??
+        document.querySelector(`[id^="${CSS.escape(id)}"]`);
+      el?.scrollIntoView({ behavior: "smooth" });
     }, 300);
     return () => clearTimeout(timer);
   }, []);
